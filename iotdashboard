@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>IoT Dashboard</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    table { border-collapse: collapse; margin-bottom: 30px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; }
+    th { background: #f0f0f0; }
+    h2 { margin-top: 40px; }
+  </style>
+</head>
+<body>
+<h1>IoT Dashboard (Live from GitHub)</h1>
+<div id="latest"></div>
+<div id="stats"></div>
+<div id="energy"></div>
+
+<script>
+const LOG_URL = "https://raw.githubusercontent.com/YOURNAME/iot-dashboard/main/datapoints.log";
+
+async function loadLog() {
+  const resp = await fetch(LOG_URL);
+  const text = await resp.text();
+  const lines = text.trim().split('\n');
+  const devices = {};
+  const energy = [];
+
+  for (const line of lines) {
+    const parts = Object.fromEntries(
+      line.split(',').map(p => p.split('=')).filter(p => p.length === 2)
+    );
+    const ts = line.split(',')[0];
+    if (parts.device) {
+      const dev = parts.device;
+      if (!devices[dev]) devices[dev] = [];
+      devices[dev].push({t: ts, temp: +parts.temperature, hum: +parts.humidity, dew: +parts.dewpoint});
+    } else if (parts.type === 'logenergyusage') {
+      energy.push({t: ts, wh: +parts.wh});
+    }
+  }
+
+  // latest per device
+  let html = "<h2>Latest values</h2><table><tr><th>Device</th><th>Temp</th><th>Hum</th><th>Dew</th><th>Time</th></tr>";
+  for (const dev in devices) {
+    const last = devices[dev][devices[dev].length-1];
+    html += `<tr><td>${dev}</td><td>${last.temp.toFixed(1)}</td><td>${last.hum.toFixed(1)}</td><td>${last.dew.toFixed(1)}</td><td>${last.t}</td></tr>`;
+  }
+  html += "</table>";
+  document.getElementById("latest").innerHTML = html;
+
+  // simple stats
+  let st = "<h2>Device statistics (all data)</h2><table><tr><th>Device</th><th>Samples</th><th>AvgT</th><th>MinT</th><th>MaxT</th><th>AvgH</th></tr>";
+  for (const dev in devices) {
+    const arr = devices[dev];
+    const temps = arr.map(a=>a.temp);
+    const hums = arr.map(a=>a.hum);
+    const avg = x=>x.reduce((a,b)=>a+b,0)/x.length;
+    st += `<tr><td>${dev}</td><td>${arr.length}</td><td>${avg(temps).toFixed(1)}</td><td>${Math.min(...temps).toFixed(1)}</td><td>${Math.max(...temps).toFixed(1)}</td><td>${avg(hums).toFixed(1)}</td></tr>`;
+  }
+  st += "</table>";
+  document.getElementById("stats").innerHTML = st;
+
+  // energy summary
+  const total = energy.reduce((a,b)=>a+b.wh,0);
+  document.getElementById("energy").innerHTML =
+    `<h2>Energy usage</h2><p>Total entries: ${energy.length}<br>Total: ${total.toFixed(1)} Wh<br>Avg: ${(total/energy.length).toFixed(2)} Wh</p>`;
+}
+
+loadLog();
+</script>
+</body>
+</html>
